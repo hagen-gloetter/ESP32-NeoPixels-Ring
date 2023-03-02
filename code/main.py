@@ -1,73 +1,69 @@
-# Written by hagen@gloetter.de 024.002.2023
-#
-
-# Setup da stuff
-# Micropython:
-
-# Pins used
-# NeoPixels Ring
-#       Pin = 7
-
+# Written by ramona@gloetter.de & hagen@gloetter.de 2023-03-01
 
 import time
-import sys
-import random
-import os
-
 import machine
-import neopixel
+import class_wifi_connection
+from class_mqtt import MQTT
+from class_color_wheel import color_wheel
 
-# Configure the count of pixels:
-PIXEL_COUNT = 12
-PIN = 10
-np = neopixel.NeoPixel(machine.Pin(PIN), PIXEL_COUNT)
+print ("Setup Wifi")
+global wifi
+wifi = class_wifi_connection.WifiConnect()
+(wifi_status, wifi_ssid, wifi_ip) = wifi.connect()
 
+led_ring = color_wheel(12, 10)
+led_ring.display_percentage(100)
 
-def demo(np):
-    n = np.n
+client_id = "led-ring01"
+mqtt = MQTT()
+mqttclient = mqtt.connect(client_id)
+topicSoC1 = b"mqtt.0.Seplos.BatteryPack1.soc"
+topicSoC2 = b"mqtt.0.Seplos.BatteryPack2.soc"
+SOC1=0
+SOC2=0
 
-    # cycle
-    for i in range(4 * n):
-        for j in range(n):
-            np[j] = (0, 0, 0)
-        np[i % n] = (255, 255, 255)
-        np.write()
-        time.sleep_ms(25)
-
-    # bounce
-    for i in range(4 * n):
-        for j in range(n):
-            np[j] = (0, 0, 128)
-        if (i // n) % 2 == 0:
-            np[i % n] = (0, 0, 0)
-        else:
-            np[n - 1 - (i % n)] = (0, 0, 0)
-        np.write()
-        time.sleep_ms(60)
-
-    # fade in/out
-    for i in range(0, 4 * 256, 8):
-        for j in range(n):
-            if (i // 256) % 2 == 0:
-                val = i & 0xff
-            else:
-                val = 255 - (i & 0xff)
-            np[j] = (val, 0, 0)
-        np.write()
-
-    # clear
-    for i in range(n):
-        np[i] = (0, 0, 0)
-    np.write()
+def on_message(topic, msg):
+    global led_ring
+    global SOC1
+    global SOC2
+    print("Received message `{0}` under topic {1}".format(msg, topic))
+    SOC2 = SOC1
+    SOC1 = float(msg)
+    if SOC2 == 0:
+        SOC2 = SOC1 # fix 1st run
+#    if topic in topicSoC1:
+#        SOC1=int(msg)
+#    if topic in topicSoC2:
+#        SOC2=int(msg)
+    p=(SOC1+SOC2+0.01)/2 # no div/0
+    print (f"SOC1 {SOC1} SOC2 {SOC2} p={p}%")
+    led_ring.display_percentage(p)
 
 
+mqttclient.set_callback(on_message)
+mqttclient.subscribe(topicSoC1)
+mqttclient.subscribe(topicSoC2)
+
+test=0
 
 if __name__ == "__main__":
-    np[0] = (127, 0, 0) # set to red, full brightness
-    np[1] = (0, 128, 0) # set to green, half brightness
-    np[2] = (0, 0, 64)  # set to blue, quarter brightness
-
-    np.write()
-    demo(np)
-
-
+    try:
+        while True:
+            time.sleep(5)
+            mqttclient.check_msg()
+            (wifi_status, wifi_ssid, wifi_ip) = wifi.check_connection()
+            # TODO Restore MQTT after WLAN Reconnect
+    except KeyboardInterrupt:
+        print("exiting")
+        
+    if test==1:
+        led_ring = color_wheel(12, 10)
+        led_ring.display_percentage(30)
+        time.sleep(2)
+        led_ring.display_percentage(-10)
+        time.sleep(2)
+        led_ring.display_percentage(100)
+        time.sleep(2)
+        led_ring.display_percentage(50)
+        time.sleep(2)
+        led_ring.display_percentage(120)
