@@ -6,13 +6,15 @@ import class_wifi_connection
 from class_mqtt import MQTT
 from class_color_wheel import color_wheel
 
+led_ring1 = color_wheel(12, 25)
+led_ring2 = color_wheel(12, 27)
+led_ring1.display_percentage(100)
+led_ring2.display_percentage(100)
+
 print ("Setup Wifi")
 global wifi
 wifi = class_wifi_connection.WifiConnect()
 (wifi_status, wifi_ssid, wifi_ip) = wifi.connect()
-
-led_ring = color_wheel(12, 10)
-led_ring.display_percentage(100)
 
 client_id = "led-ring01"
 mqtt = MQTT()
@@ -23,7 +25,7 @@ SOC1=0
 SOC2=0
 
 def on_message(topic, msg):
-    global led_ring
+    global led_ring1
     global SOC1
     global SOC2
     print("Received message `{0}` under topic {1}".format(msg, topic))
@@ -37,9 +39,10 @@ def on_message(topic, msg):
 #        SOC2=int(msg)
     p=(SOC1+SOC2+0.01)/2 # no div/0
     print (f"SOC1 {SOC1} SOC2 {SOC2} p={p}%")
-    led_ring.display_percentage(p)
+    led_ring1.display_percentage(p)
+    led_ring2.display_percentage(p)
 
-
+led_ring1.display_percentage(0)
 mqttclient.set_callback(on_message)
 mqttclient.subscribe(topicSoC1)
 mqttclient.subscribe(topicSoC2)
@@ -57,13 +60,14 @@ if __name__ == "__main__":
         print("exiting")
         
     if test==1:
-        led_ring = color_wheel(12, 10)
-        led_ring.display_percentage(30)
+        led_ring1 = color_wheel(12, 10)
+        led_ring1.display_percentage(30)
         time.sleep(2)
-        led_ring.display_percentage(-10)
+        led_ring1.display_percentage(-10)
         time.sleep(2)
-        led_ring.display_percentage(100)
+        led_ring1.display_percentage(100)
         time.sleep(2)
-        led_ring.display_percentage(50)
+        led_ring1.display_percentage(50)
         time.sleep(2)
-        led_ring.display_percentage(120)
+        led_ring1.display_percentage(120)
+

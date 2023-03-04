@@ -7,7 +7,7 @@ import machine
 import neopixel
 
 class color_wheel:
-    def __init__(self, pixel_count=12, pin=10):
+    def __init__(self, pixel_count=12, pin=11):
         self.pixel_count = pixel_count
         self.pin = pin
         self.np = neopixel.NeoPixel(machine.Pin(self.pin), self.pixel_count)
@@ -55,12 +55,30 @@ class color_wheel:
                 time.sleep(0.25)
                 self.np[i] = (0, 0, 0)
                 self.np.write()
+    def show_all(self,cnt=24):
+        R = self.brightness
+        G = 0 #self.brightness
+        B = 0 #self.brightness
+        for i in range(cnt):
+            self.np[i] = (R, G, B)
+            self.np.write()
+            time.sleep(0.25)
+        
                 
 def main():
-    led_ring = color_wheel(12, 10)
+    led_ring = color_wheel(12, 25)
+    led_ring2 = color_wheel(12, 27)
+    
+    led_ring.show_all(12)
     led_ring.display_percentage(100)
     led_ring.display_percentage(50)
+    
+    led_ring2.show_all(12)
+    led_ring2.display_percentage(100)
+    led_ring2.display_percentage(50)
+    
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
