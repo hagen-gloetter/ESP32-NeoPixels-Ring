@@ -48,7 +48,7 @@ class WifiConnect:
             #    print (key)
             self.wifi = network.WLAN(network.STA_IF)
             self.wifi.active(True)
-            self.wifi.disconnect()  # ensure we're disconnected
+            self.wifi.disconnect()  # be sure to be disconnected
             nets = self.wifi.scan()
             # print ("NETS: ",nets)
             # print (type (nets))
@@ -56,7 +56,7 @@ class WifiConnect:
                 if ssid in str(nets):
                     print(f"++++++++ Network {ssid} found!")
                     pwd = wlan_json[ssid]
-                    print("Trying to connect to SSID:", ssid)
+                    print("tying to connect ssid:", ssid)
                     (
                         self.wifi_status,
                         self.wifi_ssid,
@@ -70,15 +70,15 @@ class WifiConnect:
             
 
     def try_wifi_connect(self, ssid=None, pwd=None):
-        if ssid is None:
+        if ssid == None:
             ssid = self.wifi_ssid
             pwd = self.wifi_pw
         try:
             self.wifi.connect(ssid, pwd)
-            timeout = 10000  # 10 Sekunden Timeout
-            start_time = utime.ticks_ms()  # Millisekunden-Zähler
+            timeout = 10000  # 10 seconds timeout
+            start_time = machine.time() * 1000
             while not self.wifi.isconnected():
-                if utime.ticks_diff(utime.ticks_ms(), start_time) > timeout:
+                if machine.time() * 1000 - start_time > timeout:
                     print("Connection timeout reached")
                     break
                 machine.idle()  # save power while waiting
