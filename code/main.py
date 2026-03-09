@@ -110,7 +110,8 @@ def on_message(topic, msg):
         elif topic == TOPIC_ACOUTW:
             state["acoutw"] = int(msg)
         else:
-            return   # unknown topic — ignore silently
+            print("MQTT rx (unmatched topic):", topic, "=", msg)
+            return
         state["dirty"] = True
         print("MQTT rx:", topic, "=", msg)
     except (ValueError, UnicodeError) as e:
@@ -199,7 +200,12 @@ try:
             state["dirty"] = False
             _update_leds()
 
-        # 4) NTP periodic re-sync ──────────────────────────────────────────────
+        # 4) Periodic debug: print current state every 30 s
+        #    Remove or comment out once topics are confirmed correct.
+        if utime.time() % 30 == 0:
+            print("STATE:", state)
+
+        # 5) NTP periodic re-sync ──────────────────────────────────────────────
         if utime.time() - _last_ntp_s >= NTP_INTERVAL_S:
             _last_ntp_s = utime.time()
             try:
