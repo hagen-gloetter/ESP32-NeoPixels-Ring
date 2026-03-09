@@ -60,6 +60,14 @@ wifi_status, _, _ = wifi.connect()
 if wifi_status == "online":
     # Success: right ring (Ring 2) blinks blue 3×
     led_ring2.blink_blue(3)
+    # Start WebREPL now that WiFi is up (password set via webrepl_cfg.py or
+    # first-time setup via REPL: import webrepl; webrepl.start(password="xxx"))
+    try:
+        import webrepl
+        webrepl.start()
+        print("WebREPL started")
+    except Exception as e:
+        print("WebREPL start failed:", e)
 else:
     # Failure: left ring (Ring 1) blinks blue 3×
     led_ring1.blink_blue(3)
