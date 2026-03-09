@@ -1,12 +1,41 @@
-# main.py  —  Solar/Battery NeoPixel Monitor
-# Board  : ESP32 (MicroPython)
-# LEDs   : 2× WS2812B NeoPixel ring, 12 LEDs each, bpp=3 (RGB)
-# Ring 1 (GPIO 25): SoC average of both battery packs, red→green gradient
-# Ring 2 (GPIO 27): Solar watts (green) + AC-load watts (red), overlaid
-# Written by ramona@gloetter.de & hagen@gloetter.de 2023-03-01
-# Refactored 2026: bug fixes, non-blocking renderer, MQTT error handling
+"""
+main.py — Solar/Battery NeoPixel Monitor
+=========================================
+Board  : ESP32 (MicroPython ≥ 1.20)
+Authors: ramona@gloetter.de & hagen@gloetter.de
+
+Hardware
+--------
+Two 12-LED WS2812B NeoPixel rings (bpp=3, RGB, 800 kHz):
+
+  Ring 1 — GPIO 25  (right ring when mounted)
+    Displays the average State of Charge across all 3 battery packs as a
+    red→green gradient.  10 LEDs = 0–100 %, 10 %/LED with proportional
+    partial-LED dimming.  LED 12 shows WiFi status (blue = online).
+
+  Ring 2 — GPIO 27  (left ring when mounted)
+    Split energy display:
+      LEDs 1–6  (clockwise)         : AC load in Watts — red
+      LEDs 12–7 (counter-clockwise) : Solar production in Watts — green
+    Scale: 1000 W/LED with partial dimming.  >6000 W triggers breathing pulse.
+
+Architecture
+------------
+- ``state`` dict is the single source of truth; the MQTT callback only
+  writes here (no LED calls inside the callback).
+- LED rendering happens exclusively in ``_update_leds()``, called from the
+  main loop when ``state["dirty"]`` is True or overflow pulsing is active.
+- A hardware WDT (8 s) resets the device if the main loop ever stalls.
+- A background thread serves a minimal HTTP status page on port 80.
+
+Required files on the device filesystem
+-----------------------------------------
+  secrets_wifi.json   — WiFi credentials
+  secrets_mqtt.json   — MQTT broker credentials
+"""
 
 import utime
+import machine
 import class_wifi_connection
 from class_mqtt import MQTT
 from class_color_wheel import color_wheel
@@ -25,16 +54,14 @@ MQTT_JSON       = "secrets_mqtt.json"
 # MQTT topics as bytes — must match exactly what the broker publishes
 TOPIC_SOC1      = b"Seplos/BatteryPack1/soc"
 TOPIC_SOC2      = b"Seplos/BatteryPack2/soc"
+TOPIC_SOC3      = b"Seplos/BatteryPack3/soc"
 TOPIC_ACOUTW    = b"solaranlage/pip/acoutw"
 TOPIC_SOLARW    = b"solaranlage/pip/totalsolarw"
-_TOPICS         = (TOPIC_SOC1, TOPIC_SOC2, TOPIC_ACOUTW, TOPIC_SOLARW)
-
-# TODO: adjust SOLAR_MAX_W to match your inverter's rated output capacity
-SOLAR_MAX_W     = 2500         # watts = 100 % = all 12 LEDs lit
+_TOPICS         = (TOPIC_SOC1, TOPIC_SOC2, TOPIC_SOC3, TOPIC_ACOUTW, TOPIC_SOLARW)
 
 LOOP_MS         = 100          # main-loop tick in ms (10 Hz)
 NTP_INTERVAL_S  = 600          # NTP re-sync every 10 minutes
-MQTT_BACKOFF_MAX = 60          # max reconnect delay in seconds
+MQTT_BACKOFF_MAX = 6           # max reconnect delay in seconds (must be < WDT timeout 8 s)
 
 # ── Shared state ───────────────────────────────────────────────────────────────
 # Single source of truth; MQTT callback only writes here.
@@ -42,6 +69,7 @@ MQTT_BACKOFF_MAX = 60          # max reconnect delay in seconds
 state = {
     "SOC1":        0.0,
     "SOC2":        0.0,
+    "SOC3":        0.0,
     "acoutw":      0,
     "totalsolarw": 0,
     "dirty":       True,   # True → LEDs need a redraw
@@ -87,22 +115,24 @@ _mqttclient  = None
 _mqtt_backoff = 1              # current backoff delay in seconds
 
 
-def _watts_to_leds(watts):
-    """Convert watt value to LED count (0..LED_COUNT), clamped."""
-    p = (int(watts) + 1) * 100 // SOLAR_MAX_W
-    return max(0, min(LED_COUNT, round(p * LED_COUNT / 100)))
-
-
 def on_message(topic, msg):
-    """
-    MQTT callback — runs in the main loop context.
-    FAST: only updates state dict, zero LED writes, zero sleeps.
+    """MQTT message callback — called by ``check_msg()`` in the main loop.
+
+    Intentionally minimal: only updates the ``state`` dict and sets
+    ``state["dirty"]`` to True.  No LED writes, no sleeps, no side-effects.
+    LED rendering is deferred to ``_update_leds()`` in the main loop.
+
+    Args:
+        topic (bytes): MQTT topic of the incoming message.
+        msg (bytes):   Message payload.
     """
     try:
         if topic == TOPIC_SOC1:
             state["SOC1"] = float(msg)
         elif topic == TOPIC_SOC2:
             state["SOC2"] = float(msg)
+        elif topic == TOPIC_SOC3:
+            state["SOC3"] = float(msg)
         elif topic == TOPIC_SOLARW:
             state["totalsolarw"] = int(msg)
         elif topic == TOPIC_ACOUTW:
@@ -124,7 +154,15 @@ DEBUG_ALL_TOPICS = False
 
 
 def _mqtt_connect():
-    """Connect to broker, set socket timeout, re-subscribe. Returns True on success."""
+    """Connect to the MQTT broker, configure the socket timeout, and subscribe.
+
+    Sets a 0.5 s socket timeout on the underlying socket so that
+    ``check_msg()`` never blocks indefinitely.  On failure the global
+    ``_mqttclient`` is set to ``None`` so the main loop triggers a retry.
+
+    Returns:
+        bool: ``True`` if the connection and subscriptions succeeded.
+    """
     global _mqttclient
     try:
         _mqttclient = _mqtt_obj.connect(CLIENT_ID, keepalive=60)
@@ -145,20 +183,24 @@ def _mqtt_connect():
 
 
 def _update_leds():
-    """
-    Render current state to both rings.
-    Called only when state["dirty"] is True — never inside on_message().
-    Two np.write() calls total (one per ring).
-    """
-    # Ring 1: average SoC, red→green gradient
-    avg_soc = (state["SOC1"] + state["SOC2"]) / 2.0
-    led_ring1.set_ring1_percent(avg_soc)
+    """Render the current ``state`` to both NeoPixel rings.
 
-    # Ring 2: solar power (green) and AC load (red) overlaid
-    led_ring2.set_ring2_channels(
-        num_r=_watts_to_leds(state["acoutw"]),
-        num_g=_watts_to_leds(state["totalsolarw"]),
-    )
+    Ring 1: average SoC of all three battery packs, red→green gradient.
+    Ring 2: split energy display (load red / solar green), 1000 W/LED.
+
+    Called when ``state["dirty"]`` is True or ``_overflow_mode`` is active.
+    Produces exactly two ``np.write()`` calls per invocation (one per ring).
+    Never call this from inside ``on_message()``.
+    """
+    global _overflow_mode
+    # Ring 1: average SoC of all 3 packs, red→green gradient + WiFi LED at index 11
+    avg_soc = (state["SOC1"] + state["SOC2"] + state["SOC3"]) / 3.0
+    led_ring1.set_ring1_percent(avg_soc, wifi.isconnected())
+
+    # Ring 2: split ring, 1000 W/LED, partial LED dimmed for ~1 W resolution.
+    # Overflow (>6000 W per segment): all 6 segment LEDs pulse (~2 s cycle).
+    _overflow_mode = (state["acoutw"] > 6000 or state["totalsolarw"] > 6000)
+    led_ring2.set_ring2_watts(state["acoutw"], state["totalsolarw"], _loop_count)
 
 
 # ── Webserver (background thread) ─────────────────────────────────────────────
@@ -172,9 +214,20 @@ _update_leds()   # show "all off / 0 %" until first MQTT message arrives
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 print("Entering main loop (tick:", LOOP_MS, "ms)")
-_loop_count = 0   # counter for periodic debug output
+_loop_count    = 0      # counter for periodic debug output
+_overflow_mode = False  # True while Ring 2 overflow pulsing is active (enables per-tick re-render)
+
+# ── Hardware Watchdog ─────────────────────────────────────────────────────────
+# Resets the ESP32 if the main loop is not reached within 8 s.
+# All blocking operations (WiFi reconnect, MQTT backoff) are capped below 8 s.
+wdt = machine.WDT(timeout=8000)
+print("WDT started (8 s timeout)")
+
 try:
     while True:
+        # 0) Feed hardware watchdog ────────────────────────────────────────────
+        wdt.feed()
+
         # 1) WiFi watchdog ─────────────────────────────────────────────────────
         if not wifi.isconnected():
             print("WiFi offline, reconnecting…")
@@ -194,6 +247,7 @@ try:
             except OSError as e:
                 print("MQTT error:", e, "— reconnect in", _mqtt_backoff, "s")
                 _mqttclient = None
+                wdt.feed()   # feed before intentional sleep — stay within 8 s WDT window
                 utime.sleep(_mqtt_backoff)
                 _mqtt_backoff = min(_mqtt_backoff * 2, MQTT_BACKOFF_MAX)
                 _mqtt_connect()
@@ -203,12 +257,14 @@ try:
                 if _mqtt_connect():
                     _mqtt_backoff = 1
                 else:
+                    wdt.feed()   # feed before intentional sleep — stay within 8 s WDT window
                     utime.sleep(_mqtt_backoff)
                     _mqtt_backoff = min(_mqtt_backoff * 2, MQTT_BACKOFF_MAX)
 
-        # 3) LED render (only when new data arrived) ───────────────────────────
-        if state["dirty"]:
-            state["dirty"] = False
+        # 3) LED render — on new data or while overflow pulsing is active ──────
+        if state["dirty"] or _overflow_mode:
+            if state["dirty"]:
+                state["dirty"] = False
             _update_leds()
 
         # 4) Heartbeat + state debug every 100 ticks (~10 s)

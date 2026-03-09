@@ -1,23 +1,47 @@
-# class_webserver.py
-# Simple HTTP status page for ESP32 (MicroPython), runs in background thread.
-# FIX: conn referenced before assignment in except (NameError),
-#      html_code used str+float/int (TypeError),
-#      now receives shared state dict instead of reading stale module globals,
-#      proper bytes HTTP headers, SO_REUSEADDR, finally block for socket cleanup.
+"""
+class_webserver.py — Minimal HTTP status page for ESP32 (MicroPython).
+
+Serves a single auto-refreshing HTML page on port 80 showing the current
+solar/battery state. Runs in a background thread started at construction
+time so it never blocks the main loop.
+
+Typical usage::
+
+    from class_webserver import Webserver
+
+    state = {"SOC1": 0.0, "SOC2": 0.0, "SOC3": 0.0,
+             "acoutw": 0, "totalsolarw": 0}
+    server = Webserver(state)   # starts background thread immediately
+    # ...
+    server.stop_webserver()     # graceful shutdown
+
+The page refreshes every 10 seconds via an HTML meta tag.
+"""
 
 import socket
 import _thread
 
 
 class Webserver:
-    """
-    Minimal HTTP server. Accepts a shared state dict and serves a status page.
+    """Minimal single-page HTTP server running in a background thread.
 
-    state keys: SOC1 (float), SOC2 (float), acoutw (int), totalsolarw (int)
+    Reads a shared ``state`` dict and renders the current values as HTML.
+    The background thread is started automatically in ``__init__``.
 
-    NOTE: state dict is read from a second thread. In MicroPython the GIL
-    protects individual dict lookups, so explicit locking is not required for
-    simple integer/float reads, but be aware of this if the structure grows.
+    Args:
+        state (dict): Shared state dictionary with the following keys:
+
+            - ``SOC1`` (float): Battery Pack 1 State of Charge in %.
+            - ``SOC2`` (float): Battery Pack 2 State of Charge in %.
+            - ``SOC3`` (float): Battery Pack 3 State of Charge in %.
+            - ``acoutw`` (int): AC output load in Watts.
+            - ``totalsolarw`` (int): Total solar production in Watts.
+
+    Notes:
+        The state dict is read from the server thread concurrently with
+        writes from the main loop.  MicroPython's GIL protects individual
+        dict item reads for int/float values, so no explicit lock is needed
+        for this read-only access pattern.
     """
 
     def __init__(self, state):
@@ -64,7 +88,7 @@ class Webserver:
                         pass
 
     def _html(self):
-        """Render status page. FIX: use .format() instead of str+float/int."""
+        """Render the HTML status page from the current state dict."""
         s = self._state
         return (
             "<!DOCTYPE html><html><head>"
@@ -85,6 +109,10 @@ class Webserver:
         )
 
     def stop_webserver(self):
+        """Signal the server thread to stop and close the listen socket.
+
+        The background thread exits after its current ``accept()`` unblocks.
+        """
         self._run = False
         try:
             self._sock.close()

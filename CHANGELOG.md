@@ -5,6 +5,110 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 10)
+
+### Changed
+
+- **All modules — Dokumentation auf GitHub-Standard angehoben**
+  - Jede Datei erhält einen Modul-Docstring mit Zweck, Dateiformat-Beispielen und
+    Verwendungs-Snippet (`::`-Codeblock).
+  - Alle Klassen haben `Args`/`Returns`/`Raises`/`Notes`-Sektionen im Docstring.
+  - Alle öffentlichen Methoden haben vollständige Docstrings mit Parametern und
+    Rückgabewerten.
+  - Interne `# FIX:`-Entwicklungsnotizen aus den Datei-Headern entfernt
+    (diese Informationen sind im ``CHANGELOG.md`` dokumentiert).
+  - Auskommentierte Debug-Prints in `class_wifi_connection.py` entfernt.
+  - `stop_all()` in `class_wifi_connection.py` erhält Docstring als Backward-
+    Compatibility-Alias für `disconnect()`.
+  - `ssid == None` → `ssid is None` (PEP 8 Identitätsvergleich).
+  - `get_wifi_status()` gab fälschlicherweise `self.wifi.isconnected()` zurück
+    statt des State-Lists — korrigiert auf `[status, ssid, ip]`.
+
+---
+
+## [Unreleased] — 2026-03-09 (Session 9)
+
+### Changed
+
+- **`class_color_wheel.py` — `set_ring1_percent()`: 10-LED-Skala mit Teillicht-Dimming**  
+  Ring 1 (SoC-Anzeige) nutzt jetzt Indizes 0–9 (10 LEDs), 10 % pro LED.  
+  Die nächste LED wird proportional gedimmt (z. B. 75 % → LED 0–6 volle Helligkeit,  
+  LED 7 bei 50 % Helligkeit, LED 8–9 aus).  
+  Der Farbgradient (rot → grün) wird auf die 10 SoC-LEDs umgerechnet, sodass  
+  LED 0 = reines Rot (0 %) und LED 9 = reines Grün (100 %).  
+  Index 10 (LED 11) bleibt dauerhaft aus.  
+  Index 11 (LED 12) behält den WiFi-Indikator (blau 50 % / aus).
+
+---
+
+## [Unreleased] — 2026-03-09 (Session 8)
+
+### Added
+
+- **`main.py` — 3. Akku-Pack (BatteryPack3)**  
+  Topic `Seplos/BatteryPack3/soc` als `TOPIC_SOC3` ergänzt und zu `_TOPICS` hinzugefügt.  
+  `state["SOC3"]` im Shared-State-Dict angelegt.  
+  `on_message()` behandelt das neue Topic analog zu SOC1/SOC2.  
+  SoC-Mittelwert in `_update_leds()` auf drei Packs umgestellt: `(SOC1 + SOC2 + SOC3) / 3`.
+
+- **`main.py` — Hardware-Watchdog (WDT)**  
+  `machine.WDT(timeout=8000)` wird direkt vor dem Main-Loop gestartet.  
+  `wdt.feed()` wird zu Beginn jedes Loop-Ticks (~100 ms) und explizit vor jedem
+  blockierenden `utime.sleep()` (MQTT-Backoff) aufgerufen.  
+  Wird der Main-Loop für mehr als 8 s nicht erreicht (z. B. Deadlock), startet der ESP32
+  automatisch neu.
+
+- **`class_color_wheel.py` — WiFi-Status-LED auf Ring 1 (Index 11)**  
+  `set_ring1_percent()` erhält neuen Parameter `wifi_ok=True`.  
+  SoC-Gradient nutzt jetzt Indizes 0–10 (11 LEDs, 100 % = volle Helligkeit auf LED 11).  
+  Index 11 (LED 12, bisher nie beleuchtet bei <100 % SoC): zeigt WiFi-Status —  
+  Blau 50 % Helligkeit bei aktivem WLAN, aus wenn WLAN weg.
+
+### Changed
+
+- **`main.py` — `MQTT_BACKOFF_MAX` von 60 auf 6 Sekunden reduziert**  
+  Notwendig damit der MQTT-Backoff-Sleep das 8 s WDT-Fenster nicht überschreitet.  
+  (Backoff-Schritte: 1 → 2 → 4 → 6 → 6 → …)
+
+- **`class_wifi_connection.py` — WiFi-Verbindungs-Timeout von 10 000 ms auf 7 000 ms reduziert**  
+  `try_wifi_connect()` blockiert den Main-Loop maximal 7 s; bleibt damit sicher innerhalb
+  des 8 s WDT-Fensters (WDT wird am Loop-Anfang gefüllt, WiFi-Reconnect läuft dazwischen).
+
+---
+
+## [Unreleased] — 2026-03-09 (Session 7)
+
+### Changed
+
+- **`class_color_wheel.py` — neue Methode `set_ring2_watts(acoutw, solarw, tick)`**  
+  Ring 2 zeigt Last und Solar auf einem geteilten Ring:
+  - LED 1–6 (Indizes 0–5): Last in Rot, im Uhrzeigersinn
+  - LED 12–7 (Indizes 11–6): Solar in Grün, gegen den Uhrzeigersinn
+  - Maßstab: 1000 W/LED (volle Helligkeit); die Teillicht-LED wird proportional
+    gedimmt, sodass ~1 W Auflösung erreichbar ist (sichtbare 500 W-Stufen)
+  - Überlauf (>6000 W je Segment): alle 6 Segment-LEDs pulsieren mit
+    symmetrischer Dreieckswelle, Periode ~2 s (20 Loop-Ticks)
+
+- **`main.py` — `_update_leds()` auf `set_ring2_watts()` umgestellt**  
+  Ruft die neue Methode mit `acoutw`, `totalsolarw` und `_loop_count` auf.  
+  Setzt das neue Flag `_overflow_mode = True`, sobald ein Segment-Wert >6000 W,
+  um per-Tick-Rendering für den Puls-Effekt zu aktivieren.
+
+- **`main.py` — Render-Bedingung im Main-Loop erweitert**  
+  LED-Update jetzt bei `state["dirty"]` **oder** `_overflow_mode`,
+  damit der Atemeffekt auch ohne neue MQTT-Daten kontinuierlich animiert wird.
+
+### Removed
+
+- **`main.py` — `_watts_to_leds()` entfernt**  
+  Hilfsfunktion wurde ausschließlich vom alten `set_ring2_channels()`-Aufruf genutzt
+  und ist durch die neue wattgenaue Skalierung in `set_ring2_watts()` ersetzt.
+
+- **`main.py` — Konstante `SOLAR_MAX_W` entfernt**  
+  War nur für `_watts_to_leds()` relevant und nicht mehr benötigt.
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 6)
 
 ### Changed

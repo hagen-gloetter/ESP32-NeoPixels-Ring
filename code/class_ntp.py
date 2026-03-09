@@ -1,8 +1,20 @@
-# class_ntp.py
-# NTP time sync with CET/CEST correction for ESP32 (MicroPython)
-# FIX: DST formula was wrong (day - weekday + 1 is off by days at month boundary).
-#      Correct formula: day - (weekday + 1) % 7
-#      Replaced machine.reset() on timeout with OSError so caller can decide.
+"""
+class_ntp.py — NTP time synchronisation with EU CET/CEST correction (MicroPython).
+
+Syncs the ESP32 hardware RTC via ``ntptime`` (NTP pool server), then applies
+the correct Central European Time offset (+1 h CET / +2 h CEST) using a
+proper last-Sunday-of-month DST boundary formula.
+
+Typical usage::
+
+    from class_ntp import NTPClock
+
+    ntp = NTPClock()
+    ntp.sync_time(wifi)       # raises OSError if WiFi is unavailable
+    print(ntp.get_time())     # → "14:32:07"
+
+Re-sync periodically (every ~10 min) because the ESP32 crystal drifts.
+"""
 
 import ntptime
 import utime
@@ -10,13 +22,28 @@ import machine
 
 
 class NTPClock:
+    """Hardware RTC wrapper with NTP sync and EU daylight saving time support.
+
+    After ``sync_time()`` the RTC is set to local time (CET or CEST).
+    ``get_time()`` reads the RTC directly so it keeps working even if the
+    network is temporarily unavailable.
+    """
+
     def __init__(self):
         self.rtc = machine.RTC()
 
     def sync_time(self, wlan, timeout_s=30):
-        """Sync RTC from NTP (UTC) and apply CET/CEST offset.
+        """Sync the RTC from NTP and apply the CET/CEST offset.
 
-        Raises OSError if WiFi is not connected within timeout_s.
+        Blocks until WiFi is available or *timeout_s* is reached.
+
+        Args:
+            wlan:          A ``WifiConnect`` (or any object with an
+                           ``isconnected()`` method).
+            timeout_s (int): Maximum seconds to wait for WiFi. Default: 30.
+
+        Raises:
+            OSError: If WiFi is not connected within *timeout_s* seconds.
         """
         t0 = utime.time()
         while not wlan.isconnected():
@@ -35,11 +62,18 @@ class NTPClock:
 
     @staticmethod
     def _is_dst(month, day, weekday):
-        """EU DST: active from last Sunday in March to last Sunday in October.
+        """Return True if the given date falls within EU summer time (CEST).
 
-        weekday: 0=Monday ... 6=Sunday  (MicroPython utime convention)
-        FIX: correct last-Sunday formula is day - (weekday + 1) % 7
-             Old formula (day - weekday + 1) was wrong for all weekdays.
+        DST is active from the last Sunday of March to the last Sunday of October.
+        Last-Sunday formula: ``last_sun = day - (weekday + 1) % 7``
+
+        Args:
+            month (int):   Month number (1–12).
+            day (int):     Day of month (1–31).
+            weekday (int): 0 = Monday … 6 = Sunday (MicroPython ``utime`` convention).
+
+        Returns:
+            bool: ``True`` if CEST (+2 h) applies, ``False`` for CET (+1 h).
         """
         if month < 3 or month > 10:
             return False
@@ -53,7 +87,7 @@ class NTPClock:
         return last_sun < 25
 
     def get_time(self):
-        """Return current RTC time as HH:MM:SS string."""
+        """Return the current RTC time as a ``HH:MM:SS`` string."""
         _, _, _, _, h, m, s, _ = self.rtc.datetime()
         return "{:02d}:{:02d}:{:02d}".format(h, m, s)
 
