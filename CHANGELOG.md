@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 3)
+
+### Fixed
+
+- **[BUG-24] `main.py` — Debug-Print `utime.time() % 30 == 0` feuerte nie**  
+  Nach NTP-Sync liefert `utime.time()` einen ~820-Millionen-Sekunden-Wert.  
+  Bei 100 ms-Takt (10 Polls pro Sekunde) war es reiner Zufall, ob eine exakt durch 30  
+  teilbare Sekunde getroffen wurde — in der Praxis feuerte der Print niemals.  
+  *Fix:* Ersetzt durch einen Schleifenzähler `_loop_count`; Print alle 100 Ticks (~10 s).
+
+- **[BUG-25] `main.py` — `umqtt.robust.check_msg()` blockierte den Main-Loop**  
+  `umqtt.robust` überschreibt `check_msg()` mit interner Reconnect-Logik. Bei einem  
+  stillen Socket-Abbruch versuchte die Library selbst zu reconnecten und blockierte dabei  
+  den Loop komplett — keine weiteren Prints, kein LED-Update, kein Heartbeat.  
+  *Fix:* Socket-Timeout von 0,5 s direkt nach `connect()` gesetzt  
+  (`_mqttclient.sock.settimeout(0.5)`), sodass `check_msg()` nicht endlos blockieren kann.
+
+- **[BUG-26] `main.py` `on_message()` — `except (ValueError, UnicodeError)` zu eng**  
+  Andere Exception-Typen (z. B. `TypeError` bei unerwartetem Payload-Format) wurden  
+  nicht gefangen und konnten den Callback still abbrechen lassen.  
+  *Fix:* Auf `except Exception` erweitert; Exception-Typ wird mit ausgegeben.
+
+### Added
+
+- **`main.py` — Loop-Heartbeat alle 10 s**  
+  `HEARTBEAT | STATE: {...}` wird alle 100 Ticks gedruckt. Ermöglicht zu erkennen ob  
+  der Loop läuft und ob MQTT-Daten ankommen. Bleibt vorerst aktiv für die Diagnose,  
+  kann nach Bestätigung der Topics ausgebaut werden.
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 2)
 
 ### Fixed
