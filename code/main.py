@@ -120,7 +120,7 @@ def on_message(topic, msg):
 
 # Set True temporarily to log ALL broker messages — helps find correct topic names.
 # Set back to False once topics are confirmed.
-DEBUG_ALL_TOPICS = True
+DEBUG_ALL_TOPICS = False
 
 
 def _mqtt_connect():

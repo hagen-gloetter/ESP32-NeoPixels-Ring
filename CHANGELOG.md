@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 6)
+
+### Changed
+
+- **`main.py` — `DEBUG_ALL_TOPICS = False`**  
+  Alle Topics wurden per Wildcard-Subscription bestätigt und sind korrekt.  
+  Debug-Logging deaktiviert; Wildcard-Subscription `#` wird nicht mehr abonniert.
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 5)
 
 ### Added
