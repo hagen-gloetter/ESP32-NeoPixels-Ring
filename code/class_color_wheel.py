@@ -46,15 +46,19 @@ class color_wheel:
 
     def show_wifi(self):
         """Flash blue 2×. Blocking — use at startup/init only."""
-        for _ in range(2):
+        self.blink_blue(2)
+
+    def blink_blue(self, n=3):
+        """Flash all LEDs blue n times. Blocking — use at startup/init only."""
+        for _ in range(n):
             for j in range(self.pixel_count):
                 self.np[j] = (0, 0, self.brightness)
             self.np.write()
-            time.sleep_ms(500)
+            time.sleep_ms(400)
             for j in range(self.pixel_count):
                 self.np[j] = (0, 0, 0)
             self.np.write()
-            time.sleep_ms(500)
+            time.sleep_ms(400)
 
     # ── Non-blocking render methods (safe to call from main loop) ──────────────
 
