@@ -108,7 +108,8 @@ def on_message(topic, msg):
         elif topic == TOPIC_ACOUTW:
             state["acoutw"] = int(msg)
         else:
-            print("MQTT rx (unmatched):", topic, "=", msg)
+            if DEBUG_ALL_TOPICS:
+                print("ALL:", topic, "=", msg)
             return
         state["dirty"] = True
         print("MQTT rx:", topic, "=", msg)
@@ -117,18 +118,24 @@ def on_message(topic, msg):
         print("MQTT parse error:", type(e).__name__, e, "| topic:", topic, "| msg:", msg)
 
 
+# Set True temporarily to log ALL broker messages — helps find correct topic names.
+# Set back to False once topics are confirmed.
+DEBUG_ALL_TOPICS = True
+
+
 def _mqtt_connect():
     """Connect to broker, set socket timeout, re-subscribe. Returns True on success."""
     global _mqttclient
     try:
         _mqttclient = _mqtt_obj.connect(CLIENT_ID, keepalive=60)
-        # Set socket read timeout so check_msg() never blocks the main loop.
-        # umqtt.robust stores the socket as .sock after connect.
         if hasattr(_mqttclient, 'sock') and _mqttclient.sock is not None:
             _mqttclient.sock.settimeout(0.5)
         _mqttclient.set_callback(on_message)
         for t in _TOPICS:
             _mqttclient.subscribe(t)
+        if DEBUG_ALL_TOPICS:
+            _mqttclient.subscribe(b"#")  # wildcard: receive every topic on the broker
+            print("DEBUG: wildcard subscription active — all topics will be logged")
         print("MQTT connected, subscribed to", len(_TOPICS), "topics")
         return True
     except OSError as e:

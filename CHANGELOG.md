@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 5)
+
+### Added
+
+- **`main.py` — `DEBUG_ALL_TOPICS` Flag + Wildcard-Subscription `#`**  
+  Temporäre Diagnosehilfe: wenn `DEBUG_ALL_TOPICS = True`, abonniert der Client zusätzlich  
+  das MQTT-Wildcard-Topic `#` und gibt **alle** eingehenden Nachrichten als  
+  `ALL: <topic> = <value>` aus. Dient zur Identifikation des korrekten Topic-Namens für  
+  `acoutw` (Istwert laut ioBroker: 819 W, im State jedoch 0 — Topic stimmt nicht überein).  
+  Nach Bestätigung der Topics `DEBUG_ALL_TOPICS = False` setzen.
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 4)
 
 ### Fixed
