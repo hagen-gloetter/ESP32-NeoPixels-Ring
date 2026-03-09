@@ -208,14 +208,16 @@ def _update_leds():
 #      module-level globals that were never updated from main.py.
 apache = class_webserver.Webserver(state)
 
+# ── Loop state (must be defined before first _update_leds() call) ─────────────
+_loop_count    = 0      # counter for periodic debug output / pulse phase
+_overflow_mode = False  # True while Ring 2 overflow pulsing is active
+
 # ── Initial MQTT connect + LED state ──────────────────────────────────────────
 _mqtt_connect()
 _update_leds()   # show "all off / 0 %" until first MQTT message arrives
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 print("Entering main loop (tick:", LOOP_MS, "ms)")
-_loop_count    = 0      # counter for periodic debug output
-_overflow_mode = False  # True while Ring 2 overflow pulsing is active (enables per-tick re-render)
 
 # ── Hardware Watchdog ─────────────────────────────────────────────────────────
 # Resets the ESP32 if the main loop is not reached within 8 s.

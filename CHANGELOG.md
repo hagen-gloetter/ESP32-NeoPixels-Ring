@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 11)
+
+### Fixed
+
+- **[BUG-28] `main.py` — `NameError: name '_loop_count' isn't defined` beim Boot**  
+  `_update_leds()` wird direkt nach `_mqtt_connect()` aufgerufen, um den
+  initialen LED-Zustand zu setzen. Die Methode übergibt `_loop_count` an
+  `set_ring2_watts()` für die Pulsberechnung — aber `_loop_count` wurde erst
+  *nach* diesem Aufruf definiert, was beim ersten Boot sofort crashte.  
+  *Fix:* `_loop_count = 0` und `_overflow_mode = False` vor den
+  `_mqtt_connect()` / `_update_leds()` Aufrufen verschoben.
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 10)
 
 ### Changed
