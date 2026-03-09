@@ -22,11 +22,11 @@ BRIGHTNESS      = 16           # Max PWM brightness (0–255; keep low for 5 V U
 CLIENT_ID       = b"led-ring01"
 MQTT_JSON       = "secrets_mqtt.json"
 
-# MQTT topics as bytes (FIX: was str — caused TypeError with umqtt bytes topic)
-TOPIC_SOC1      = b"mqtt.0.Seplos.BatteryPack1.soc"
-TOPIC_SOC2      = b"mqtt.0.Seplos.BatteryPack2.soc"
-TOPIC_ACOUTW    = b"mqtt.0.solaranlage.pip.acoutw"
-TOPIC_SOLARW    = b"mqtt.0.solaranlage.pip.totalsolarw"
+# MQTT topics as bytes — must match exactly what the broker publishes
+TOPIC_SOC1      = b"Seplos/BatteryPack1/soc"
+TOPIC_SOC2      = b"Seplos/BatteryPack2/soc"
+TOPIC_ACOUTW    = b"solaranlage/pip/acoutw"
+TOPIC_SOLARW    = b"solaranlage/pip/totalsolarw"
 _TOPICS         = (TOPIC_SOC1, TOPIC_SOC2, TOPIC_ACOUTW, TOPIC_SOLARW)
 
 # TODO: adjust SOLAR_MAX_W to match your inverter's rated output capacity

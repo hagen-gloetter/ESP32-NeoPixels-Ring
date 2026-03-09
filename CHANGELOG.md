@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 4)
+
+### Fixed
+
+- **[BUG-27] `main.py` — MQTT-Topic-Konstanten stimmten nicht mit Broker-Topics überein**  
+  Die Topics im Code verwendeten ioBroker-Adapter-Notation mit `.` als Trenner und  
+  `mqtt.0.`-Präfix. Der Broker sendet die Topics jedoch direkt mit `/` als Trenner  
+  ohne Präfix. Dadurch landeten alle eingehenden Nachrichten im `unmatched`-Zweig  
+  und kein LED-Wert wurde je gesetzt.  
+  *Fix:* Topics auf die tatsächlich vom Broker gesendeten Werte korrigiert:
+
+  | Alt (falsch) | Neu (korrekt) |
+  |---|---|
+  | `mqtt.0.Seplos.BatteryPack1.soc` | `Seplos/BatteryPack1/soc` |
+  | `mqtt.0.Seplos.BatteryPack2.soc` | `Seplos/BatteryPack2/soc` |
+  | `mqtt.0.solaranlage.pip.acoutw` | `solaranlage/pip/acoutw` |
+  | `mqtt.0.solaranlage.pip.totalsolarw` | `solaranlage/pip/totalsolarw` |
+
+---
+
 ## [Unreleased] — 2026-03-09 (Session 3)
 
 ### Fixed
