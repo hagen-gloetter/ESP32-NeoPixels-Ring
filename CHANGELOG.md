@@ -5,6 +5,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-03-09 (Session 2)
+
+### Fixed
+
+- **[BUG-20] `class_wifi_connection.py` `try_wifi_connect()` — `AttributeError: 'module' object has no attribute 'time'`**  
+  `machine.time()` does not exist in MicroPython. The call `machine.time() * 1000` used
+  for the connection timeout crashed immediately on every connect attempt.  
+  Because the exception was caught by the generic `except Exception`, `wifi_ssid` was set
+  to `"offline"`, causing `check_connection()` to call `connect()` again in an endless loop.  
+  *Fix:* Replaced `machine.time() * 1000` with `utime.ticks_ms()` and the subtraction with
+  `utime.ticks_diff()` (overflow-safe MicroPython tick comparison).
+
+- **[BUG-21] `class_wifi_connection.py` — unused imports (`WLAN`, `Timer`, `sys`, `sleep_ms`)**  
+  Left-over imports from older versions wasted RAM and indicated the file had been
+  reverted to a stale state.  
+  *Fix:* Removed all unused imports, kept only `ujson`, `network`, `machine`, `utime`.
+
+- **[BUG-22] `class_wifi_connection.py` `is_connected()` — `AttributeError` on `WLAN` object**  
+  Method called `self.wifi.check_connection()` on a `network.WLAN` instance, which has
+  no such method.  
+  *Fix:* Method removed entirely (duplicate of `isconnected()`).
+
+- **[BUG-23] `boot.py` — `webrepl.start()` called before WiFi was connected**  
+  `boot.py` runs before `main.py`, so no WiFi interface is active yet when
+  `webrepl.start()` is called. This caused an `OSError` in `webrepl.py` line 73 (`start`)
+  on every boot.  
+  *Fix:* `webrepl.start()` removed from `boot.py` and moved into `main.py`, called
+  immediately after a successful `wifi.connect()` inside a `try/except` guard.
+
+### Added
+
+- **`class_color_wheel.py` — `blink_blue(n=3)` method**  
+  New reusable method that flashes all LEDs of a ring blue `n` times (400 ms on /
+  400 ms off). `show_wifi()` now delegates to `blink_blue(2)` to avoid duplicated code.
+
+- **`main.py` — WiFi status feedback via NeoPixel rings**  
+  After `wifi.connect()` returns:
+  - **Success** → Ring 2 (right) blinks blue 3× via `led_ring2.blink_blue(3)`
+  - **Failure** → Ring 1 (left) blinks blue 3× via `led_ring1.blink_blue(3)`
+
+- **`main.py` — WebREPL started after successful WiFi connect**  
+  `webrepl.start()` is now called in `main.py` inside the `wifi_status == "online"` branch,
+  wrapped in `try/except` so a missing `webrepl_cfg.py` or failed start does not abort boot.
+
+---
+
 ## [Unreleased] — 2026-03-09
 
 ### Fixed

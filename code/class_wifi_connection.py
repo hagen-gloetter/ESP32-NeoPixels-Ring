@@ -1,11 +1,7 @@
 import ujson
 import network
-from network import WLAN
 import machine
-from machine import Timer
-import sys
-from time import sleep_ms
-import utime  # Verwende utime f�r Zeitmessung in MicroPython
+import utime
 
 
 class WifiConnect:
@@ -76,9 +72,9 @@ class WifiConnect:
         try:
             self.wifi.connect(ssid, pwd)
             timeout = 10000  # 10 seconds timeout
-            start_time = machine.time() * 1000
+            start_time = utime.ticks_ms()
             while not self.wifi.isconnected():
-                if machine.time() * 1000 - start_time > timeout:
+                if utime.ticks_diff(utime.ticks_ms(), start_time) > timeout:
                     print("Connection timeout reached")
                     break
                 machine.idle()  # save power while waiting
@@ -122,11 +118,6 @@ class WifiConnect:
             )
         return [self.wifi_status, self.wifi_ssid, self.wifi_ip]
 
-    def is_connected(self):
-        print("is_connected called")
-        (wifi_status, wifi_ssid, wifi_ip) = self.wifi.check_connection()
-        list = [self.wifi_status, self.wifi_ssid, self.wifi_ip]
-        return list
 
     def disconnect(self):
         print("disconnect called")
@@ -140,18 +131,4 @@ class WifiConnect:
         self.disconnect()
         #self.wifi.disconnect()
 
-def main():
-    wifi = WifiConnect()  # Init the class
-    (wifi_status, wifi_ssid, wifi_ip) = wifi.connect()  # connect to wifi
-    i = 0
-    while i == 0:
-        list = wifi.check_connection()
-        for item in list:
-            print(item)
-        sleep_ms(3000)
-    wifi.disconnect()
-
-
-if __name__ == "__main__":
-    sys.exit(main())
 
