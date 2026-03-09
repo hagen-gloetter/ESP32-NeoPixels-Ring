@@ -55,7 +55,14 @@ led_ring1.show_wifi()           # blue flash: "setup in progress"
 # ── WiFi ───────────────────────────────────────────────────────────────────────
 print("Setup WiFi")
 wifi = class_wifi_connection.WifiConnect()
-wifi.connect()
+wifi_status, _, _ = wifi.connect()
+
+if wifi_status == "online":
+    # Success: right ring (Ring 2) blinks blue 3×
+    led_ring2.blink_blue(3)
+else:
+    # Failure: left ring (Ring 1) blinks blue 3×
+    led_ring1.blink_blue(3)
 
 # ── NTP ────────────────────────────────────────────────────────────────────────
 print("NTP sync")
