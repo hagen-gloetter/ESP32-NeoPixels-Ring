@@ -1,7 +1,7 @@
 import paho.mqtt.client as mqttClient
 import time
-
 import ujson
+
 mqtt_json_file="code/secrets_mqtt.json"
 mqtt_json = ujson.load(open(mqtt_json_file))
 broker = mqtt_json["secretHost"]

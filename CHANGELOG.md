@@ -1,0 +1,156 @@
+# Changelog
+
+All notable changes to this project are documented in this file.  
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [Unreleased] — 2026-03-09
+
+### Fixed
+
+#### CRITICAL — Runtime crashes
+
+- **[BUG-01] `class_mqtt.py` `publish()` — `UnboundLocalError: errorcount`**  
+  `errorcount` was a bare local variable inside `publish()` instead of `self.errorcount`.  
+  Every `publish()` call that hit an exception crashed with `UnboundLocalError`.  
+  The error counter and the `connection_running` flag therefore never worked.  
+  *Fix:* Removed the counter entirely; reconnect responsibility moved to the caller.
+
+- **[BUG-02] `class_webserver.py` `thread_webserver()` — `NameError: conn` before assignment**  
+  When `self.websocket.accept()` itself raised an exception (e.g. on socket timeout),
+  `conn` was not yet defined, so the `except` block crashed with `NameError: conn`.  
+  This killed the webserver thread permanently on the first socket error.  
+  *Fix:* `conn = None` before the `try` block; guarded all `conn` uses with `if conn is not None`.
+
+- **[BUG-03] `class_webserver.py` `html_code()` — `TypeError: can only concatenate str (not float/int) to str`**  
+  `SOC1` is `float`, `acoutw` is `int`; both were concatenated directly into the HTML string.  
+  *Fix:* Replaced string concatenation with `.format()`.
+
+- **[BUG-05] `main.py` `on_message()` — `TypeError`: `str` membership test on `bytes` topic**  
+  `"totalsolarw" in topic` — `topic` is `bytes` in `umqtt`; comparing a `str` to `bytes`
+  raises `TypeError` in MicroPython. Because this occurred inside the MQTT callback,
+  the exception was silently swallowed by `umqtt.robust`, so **Ring 2 was never updated**.
+  All messages fell through to the `else`-branch (SoC logic).  
+  *Fix:* Use exact bytes equality: `topic == TOPIC_SOLARW`.
+
+- **[BUG-07] `main.py` — `OSError` from `check_msg()` terminated the main loop**  
+  `mqttclient.check_msg()` was called outside any `try/except`. When the MQTT broker
+  disconnected (without a WiFi drop), the resulting `OSError` crashed the `while True`
+  loop entirely, leaving the device in a dead state until the next watchdog reset.  
+  *Fix:* Wrapped in `try/except OSError` with exponential backoff reconnect.
+
+- **[BUG-08] `class_solar_values.py` `get_values()` — `AttributeError: self.rtc`**  
+  `self.rtc` was used in `get_values()` and `get_time()` but never initialised in
+  `__init__`. Any call to these methods crashed immediately.  
+  *(Class is dead code and not imported anywhere — marked for removal.)*
+
+#### HIGH — Incorrect behaviour
+
+- **[BUG-04] `class_webserver.py` — Webserver always showed 0 / 0 / 0 / 0**  
+  The webserver read its own module-level globals (`SOC1`, `SOC2`, …) which were never
+  updated by `main.py`. The two modules have separate namespaces.  
+  *Fix:* A shared `state` dict is passed into `Webserver.__init__()` and read by the
+  render thread.
+
+- **[BUG-06] `main.py` `on_message()` — SOC1 and SOC2 not differentiated by topic**  
+  Both `BatteryPack1.soc` and `BatteryPack2.soc` messages landed in the same `else`
+  branch. Each new message overwrote `SOC1` while rotating the old value into `SOC2`,
+  regardless of which pack actually sent the update.  
+  *Fix:* Exact topic comparison (`topic == TOPIC_SOC1` / `topic == TOPIC_SOC2`).
+
+- **[BUG-11] `main.py` — No MQTT reconnect when broker goes down (WiFi still up)**  
+  `reconnect_needed` was only set to `"yes"` on a WiFi drop. If the MQTT broker
+  restarted independently, the client stayed disconnected until the next WiFi outage.  
+  *Fix:* Dedicated MQTT error handler in the main loop triggers reconnect on any
+  `OSError` from `check_msg()`.
+
+- **[BUG-10] `class_wifi_connection.py` `is_connected()` — `AttributeError` on WLAN object**  
+  The method called `self.wifi.check_connection()` where `self.wifi` is a
+  `network.WLAN` object, which has no `check_connection()` method.  
+  *Fix:* Removed the broken `is_connected()` method; `isconnected()` delegates correctly
+  to `self.wifi.isconnected()`.
+
+- **[BUG-14] `class_ntp.py` `is_dst()` — DST boundary detection off by several days**  
+  Formula `previous_sunday = day - weekday + 1` is wrong for all weekdays:  
+  - Monday (`weekday=0`): `day - 0 + 1 = day + 1` (tomorrow — wrong)  
+  - Sunday (`weekday=6`): `day - 6 + 1 = day - 5` (five days ago — wrong)  
+  This caused the time to be off by 1 hour for up to 7 days around DST transitions.  
+  *Fix:* `last_sun = day - (weekday + 1) % 7`
+
+- **[BUG-15] `class_wifi_connection.py` `connect()` — fragile SSID scan via `str(nets)`**  
+  `if ssid in str(nets)` converts the entire scan result list to a string and checks for
+  substring presence. This matches partial SSID names inside BSSIDs (MAC addresses),
+  channel numbers, and other scan fields, potentially causing wrong network selection.  
+  *Fix:* Extract `net[0]` (SSID bytes) from scan results into a set and compare using
+  `ssid.encode() in scanned_ssids`.
+
+#### MEDIUM — Performance & stability degradation
+
+- **[BUG-09] `main.py` — Main loop slept 10 s; MQTT messages processed only once per 10 s**  
+  `time.sleep(10)` at the top of the loop meant up to 10 s latency on every MQTT message.
+  Combined with the blocking LED animations (up to 6 s), effective latency exceeded 16 s.  
+  *Fix:* Loop tick reduced to 100 ms (`utime.sleep_ms(100)`).
+
+- **[BUG-12] `class_color_wheel.py` — `time.sleep(0.25)` per LED inside MQTT callback**  
+  `display_percentage1()` and `display_percentage2()` slept 0.25 s per LED, totalling
+  up to 6 s of blocking time. These methods were called directly from `on_message()`,
+  blocking MQTT processing for the full duration.  
+  *Fix:* All `time.sleep()` removed from the render path. Rendering is non-blocking and
+  called from the main loop only when `state["dirty"]` is `True`.
+
+- **[BUG-13] `class_color_wheel.py` — `np.write()` called once per LED (12–48×/frame)**  
+  Every pixel update wrote the entire LED strip to hardware individually, causing visible
+  flicker and wasting ~450 µs × N per frame.  
+  *Fix:* Set all pixels first, then call `np.write()` exactly once per ring per frame.
+
+#### LOW — Code quality / correctness
+
+- **[BUG-16]** Removed unused imports (`sys`, `random`, `os`, `Pin`, `Timer`, `re`,
+  `network` from `class_mqtt.py` and `class_color_wheel.py`). Saved ~2–4 KB RAM.
+
+- **[BUG-17]** `reconnect_needed = "yes"/"no"` replaced by proper boolean / direct
+  reconnect logic.
+
+- **[BUG-18]** `class_solar_values.py` identified as dead code (never imported).
+  Marked with `# TODO: remove`.
+
+- **[BUG-19]** `MQTT_Client.py` uses `paho-mqtt` (CPython only) and is not deployable
+  on MicroPython. Marked with header warning.
+
+---
+
+### Changed
+
+- **`class_color_wheel.py`**: Added explicit `bpp=3, timing=1` to `NeoPixel()` constructor
+  for unambiguous WS2812B (800 kHz, RGB) configuration.
+- **`class_color_wheel.py`**: Red→green gradient precomputed in `__init__`; no float
+  arithmetic in the render hot-loop.
+- **`class_color_wheel.py`**: New public methods `set_ring1_percent()` and
+  `set_ring2_channels()` replace the per-pixel-sleep legacy methods as the canonical API.
+  Legacy methods (`display_percentage1/2`, `set_single_color`) retained as wrappers for
+  backward compatibility.
+- **`class_mqtt.py`**: Added `keepalive=60` parameter to `MQTTClient` constructor.
+  Default was `0` (no keepalive), allowing brokers to silently drop idle connections.
+- **`main.py`**: MQTT topics extracted as named byte-string constants (`TOPIC_SOC1`, …).
+- **`main.py`**: `SOLAR_MAX_W`, `BRIGHTNESS`, `LOOP_MS`, `NTP_INTERVAL_S`,
+  `MQTT_BACKOFF_MAX` extracted as top-level configuration constants.
+- **`main.py`**: `on_message()` callback is now side-effect-free: only writes to the
+  shared `state` dict and sets `state["dirty"] = True`. All LED writes moved to
+  `_update_leds()` called from the main loop.
+- **`main.py`**: Exponential backoff (1 s → 2 s → … → 60 s) on MQTT reconnect attempts.
+- **`class_webserver.py`**: Added `socket.SO_REUSEADDR` to prevent `EADDRINUSE` on
+  warm restart. Added `finally` block to always close the connection socket.
+- **`class_wifi_connection.py`**: `try_wifi_connect()` raises `OSError` on timeout
+  instead of silently falling into the `except` branch by manual `break`.
+
+---
+
+### Removed
+
+- `class_webserver.py`: Module-level `global SOC1/SOC2/acoutw/totalsolarw` declarations
+  (were never populated from `main.py`).
+- `main.py`: Dead `test == 1` branch, `kill()`, `stop_all()` functions,
+  `reconnect_needed` string-flag, and `if __name__ == "__main__":` guard
+  (unnecessary in MicroPython `main.py`).
+- Unused imports across all modules.
