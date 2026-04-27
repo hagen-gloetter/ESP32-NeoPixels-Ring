@@ -94,6 +94,7 @@ class Webserver:
         soc2 = float(s.get("SOC2", 0))
         soc3 = float(s.get("SOC3", 0))
         avg  = (soc1 + soc2 + soc3) / 3.0
+        mqtt_status = "connected" if s.get("mqtt_ok", False) else "disconnected"
         return (
             "<!DOCTYPE html><html><head>"
             "<meta charset='utf-8'>"
@@ -106,11 +107,13 @@ class Webserver:
             "<p>Average SoC: {:.1f}%</p>"
             "<p>AC Output: {} W</p>"
             "<p>Solar Total: {} W</p>"
+            "<p>MQTT: {}</p>"
             "</body></html>"
         ).format(
             soc1, soc2, soc3, avg,
             int(s.get("acoutw", 0)),
             int(s.get("totalsolarw", 0)),
+            mqtt_status,
         )
 
     def stop_webserver(self):

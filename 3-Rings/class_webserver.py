@@ -10,7 +10,7 @@ Typical usage::
     from class_webserver import Webserver
 
     state = {"SOC1": 0.0, "SOC2": 0.0, "SOC3": 0.0,
-             "acoutw": 0, "totalsolarw": 0}
+             "acoutw": 0, "totalsolarw": 0, "mqtt_ok": False}
     server = Webserver(state)   # starts background thread immediately
     # ...
     server.stop_webserver()     # graceful shutdown
@@ -36,19 +36,19 @@ class Webserver:
             - ``SOC3`` (float): Battery Pack 3 State of Charge in %.
             - ``acoutw`` (int): AC output load in Watts.
             - ``totalsolarw`` (int): Total solar production in Watts.
+            - ``mqtt_ok`` (bool): True if MQTT broker is connected.
 
     Notes:
         The state dict is read from the server thread concurrently with
         writes from the main loop.  MicroPython's GIL protects individual
-        dict item reads for int/float values, so no explicit lock is needed
-        for this read-only access pattern.
+        dict item reads for int/float/bool values, so no explicit lock is
+        needed for this read-only access pattern.
     """
 
     def __init__(self, state):
         self._state = state
         self._run = True
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # FIX: allow immediate rebind after restart (avoid TIME_WAIT errors)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", 80))
         sock.listen(3)
@@ -58,7 +58,7 @@ class Webserver:
 
     def _serve(self):
         while self._run:
-            conn = None   # FIX: always defined before except block
+            conn = None
             try:
                 conn, addr = self._sock.accept()
                 conn.recv(1024)   # consume request headers (not evaluated)
@@ -80,7 +80,6 @@ class Webserver:
                     except Exception:
                         pass
             finally:
-                # FIX: always close connection socket to avoid resource leak
                 if conn is not None:
                     try:
                         conn.close()
@@ -94,23 +93,30 @@ class Webserver:
         soc2 = float(s.get("SOC2", 0))
         soc3 = float(s.get("SOC3", 0))
         avg  = (soc1 + soc2 + soc3) / 3.0
+        mqtt_status = "connected" if s.get("mqtt_ok", False) else "disconnected"
         return (
             "<!DOCTYPE html><html><head>"
             "<meta charset='utf-8'>"
             "<meta http-equiv='refresh' content='10'>"
             "<title>Solar Monitor</title></head><body>"
             "<h1>Solar Monitor</h1>"
+            "<h2>Ring 3 — Battery SoC</h2>"
             "<p>Battery Pack 1 SoC: {:.1f}%</p>"
             "<p>Battery Pack 2 SoC: {:.1f}%</p>"
             "<p>Battery Pack 3 SoC: {:.1f}%</p>"
-            "<p>Average SoC: {:.1f}%</p>"
+            "<p><strong>Average SoC: {:.1f}%</strong></p>"
+            "<h2>Ring 1 — AC Load</h2>"
             "<p>AC Output: {} W</p>"
+            "<h2>Ring 2 — Solar</h2>"
             "<p>Solar Total: {} W</p>"
+            "<h2>Status</h2>"
+            "<p>MQTT: {}</p>"
             "</body></html>"
         ).format(
             soc1, soc2, soc3, avg,
             int(s.get("acoutw", 0)),
             int(s.get("totalsolarw", 0)),
+            mqtt_status,
         )
 
     def stop_webserver(self):
@@ -123,4 +129,3 @@ class Webserver:
             self._sock.close()
         except Exception:
             pass
-
