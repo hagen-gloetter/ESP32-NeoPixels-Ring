@@ -1,3 +1,9 @@
 
 code/secrets_mqtt.json
 code/secrets_wifi.json
+unittests/__pycache__/conftest.cpython-314.pyc
+unittests/__pycache__/test_color_wheel.cpython-314.pyc
+unittests/__pycache__/test_mqtt.cpython-314.pyc
+unittests/__pycache__/test_wifi_connection.cpython-314.pyc
+unittests/__pycache__/test_webserver.cpython-314.pyc
+unittests/__pycache__/test_ntp.cpython-314.pyc

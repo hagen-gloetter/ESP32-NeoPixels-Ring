@@ -7,6 +7,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [Unveröffentlicht / Unreleased] — 2026-05-26 (Session 15)
+
+### Deutsch — Hinzugefügt
+
+- **`unittests/`** — neue Host-Unit-Tests für die 3-Ring-Module mit Fokus auf Randfälle:
+  - `test_color_wheel.py`: Teil-LED-Dimming, Overflow-Breathing, SoC-Clamping, Legacy-Fehlerpfad
+  - `test_wifi_connection.py`: fehlende Secrets, SSID-Decode-Randfall, Timeout/Reconnect/Disconnect
+  - `test_mqtt.py`: Credential-Load, Keepalive-Weitergabe, Publish-Fehlerpfade
+  - `test_ntp.py`: DST-Grenzfälle (März/Oktober), WiFi-Timeout beim Sync
+  - `test_webserver.py`: HTML-Defaults bei fehlendem State, Durchschnittsberechnung, Shutdown
+- **`unittests/conftest.py`** — gemeinsames Mock-Testgerüst für MicroPython-Module (`machine`, `network`, `utime`, `neopixel`, `umqtt`, `socket`, `_thread`).
+- **`README.md`** — DE/EN-Testabschnitt ergänzt (`python3 -m pytest -q unittests`).
+
+### English — Added
+
+- **`unittests/`** — new host-side unit tests for 3-ring modules with edge-case focus:
+  - `test_color_wheel.py`: partial LED dimming, overflow breathing, SoC clamping, legacy error path
+  - `test_wifi_connection.py`: missing secrets, SSID decode edge case, timeout/reconnect/disconnect
+  - `test_mqtt.py`: credential loading, keepalive forwarding, publish error paths
+  - `test_ntp.py`: DST boundary cases (March/October), WiFi timeout during sync
+  - `test_webserver.py`: HTML defaults for missing state, average calculation, shutdown
+- **`unittests/conftest.py`** — shared mock test harness for MicroPython modules (`machine`, `network`, `utime`, `neopixel`, `umqtt`, `socket`, `_thread`).
+- **`README.md`** — added DE/EN test section (`python3 -m pytest -q unittests`).
+
+---
+
 ## [Unveröffentlicht / Unreleased] — 2026-04-27 (Session 14)
 
 ### Deutsch — Geändert

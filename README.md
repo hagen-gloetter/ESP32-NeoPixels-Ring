@@ -131,6 +131,18 @@ Bei Überlauf (> 6000 W) pulsiert das gesamte Segment (~2 s Atemzyklus).
 
 ---
 
+### Unit-Tests (Host, ohne ESP32)
+
+Für Logiktests der 3-Ring-Module gibt es den Ordner `unittests/`.
+Die Tests verwenden Mocks für MicroPython-Module (`machine`, `network`, `utime`, `neopixel`, `umqtt`, `socket`) und laufen auf dem Host-System.
+
+```bash
+python3 -m pip install pytest
+python3 -m pytest -q unittests
+```
+
+---
+
 ### Konfiguration
 
 Vor dem ersten Flashen zwei JSON-Dateien im Wurzelverzeichnis des ESP32-Dateisystems anlegen:
@@ -400,6 +412,18 @@ Above 6000 W the affected segment pulses (~2 s breathing cycle).
 | `umqtt.robust` | Part of the MicroPython standard archive |
 | `ntptime` | Part of the MicroPython standard archive |
 | `neopixel` | MicroPython built-in |
+
+---
+
+### Unit Tests (Host, no ESP32)
+
+Logic tests for the 3-ring modules are located in `unittests/`.
+They use mocks for MicroPython modules (`machine`, `network`, `utime`, `neopixel`, `umqtt`, `socket`) and run on a host machine.
+
+```bash
+python3 -m pip install pytest
+python3 -m pytest -q unittests
+```
 
 ---
 
